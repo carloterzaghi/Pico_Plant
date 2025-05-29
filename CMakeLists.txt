@@ -39,6 +39,7 @@ pico_sdk_init()
 add_executable(main
     main.c
     auxiliary_codes/pwm_code.c
+    auxiliary_codes/oled_ssd1306.c
     )
 
 # pull in common dependencies
@@ -47,6 +48,7 @@ target_link_libraries(main
     pico_stdlib
     hardware_adc
     hardware_pwm
+    hardware_i2c
     )
 
 if (PICO_CYW43_SUPPORTED)
