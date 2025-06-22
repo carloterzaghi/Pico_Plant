@@ -15,7 +15,8 @@
 #define I2C_SCL 11             // GPIO 11 - Linha de clock I2C
 
 // ===== Parâmetros de Sistema =====
-#define SOIL_VOLTAGE 2.5f      // Limiar de tensão: ≥2.5V = solo seco, <2.5V = solo úmido
+#define SOIL_MIN_VOLTAGE 1.44f      // Tensão mínima: >1.44V = mínimo para o solo estar úmido, depois do seco
+#define SOIL_MAX_VOLTAGE 0.58f      // Tensão máxima: <0.58V = máximo para o solo estar úmido, antes de ficar muito úmido e não matar a planta
 
 int main() {
     // === Inicialização do Sistema ===
@@ -62,20 +63,27 @@ int main() {
         printf("Leitura ADC: %d\tTensão: %.2f V\n", leitura, tensao);
 
         // --- Lógica de Irrigação ---
-        if (tensao >= SOIL_VOLTAGE) {
-            // Condição: solo seco
+        if (tensao < SOIL_MAX_VOLTAGE && motor_desligado == 0) {
+            // Condição: Menor que 0.58V e bomba não foi desligada
+            printf("Mostrando rosto triste :(\n");
+            draw_sad_face();                      // Exibe rosto triste no OLED
+            gpio_put(PUMP_GPIO, 1);               // Liga a bomba
+            sleep_ms(9000);                       // Irriga por 9 segundos
+        } 
+        else if (tensao >= SOIL_MAX_VOLTAGE) {
+            // Condição: Maior ou igual a 0.58V
+            printf("Mostrando rosto feliz :)\n");
+            draw_happy_face();                    // Exibe rosto feliz no OLED
+            gpio_put(PUMP_GPIO, 0);               // Desliga a bomba
+            motor_desligado = 1;                  // Evita desligamento repetido
+        }
+        else if (tensao < SOIL_MIN_VOLTAGE) {
+            // Condição: Menor que 1.44V
             printf("Mostrando rosto triste :(\n");
             draw_sad_face();                      // Exibe rosto triste no OLED
             motor_desligado = 0;
             gpio_put(PUMP_GPIO, 1);               // Liga a bomba
             sleep_ms(9000);                       // Irriga por 9 segundos
-        } 
-        else if (motor_desligado == 0) {
-            // Condição: solo umedecido e bomba ainda ligada
-            printf("Mostrando rosto feliz :)\n");
-            draw_happy_face();                    // Exibe rosto feliz no OLED
-            gpio_put(PUMP_GPIO, 0);               // Desliga a bomba
-            motor_desligado = 1;                  // Evita desligamento repetido
         }
 
         // Aguarda 1 segundo antes da próxima leitura
@@ -95,22 +103,28 @@ int main() {
  * 
  * 2. CICLO DE MONITORAMENTO (a cada 1 segundo):
  *    - Lê tensão do sensor (0-3.3V)
- *    - Compara com limiar (2.5V)
- *    - Controla bomba baseado na umidade
+ *    - Compara com os limiares definidos
+ *    - Controla bomba e exibe rosto no OLED conforme a umidade
  * 
- * 3. ESTADOS DO SISTEMA:
- *    - SOLO SECO (≥2.5V):   Liga bomba por 9 segundos
- *    - SOLO ÚMIDO (<2.5V):  Desliga bomba (se estava ligada)
+ * 3. ESTADOS DO SISTEMA (baseado na lógica atual):
+ *    - SOLO MUITO ÚMIDO (tensão < 0.58V e motor_desligado == 0): Liga bomba por 9 segundos, mostra rosto triste
+ *    - SOLO ÚMIDO (tensão >= 0.58V): Desliga bomba, mostra rosto feliz, evita desligamento repetido
+ *    - SOLO SECO (tensão > 1.44V): Liga bomba por 9 segundos, mostra rosto triste, permite novo ciclo
  * 
  * 4. PREVENÇÃO DE CICLOS:
- *    - Flag 'motor_desligado' evita comandos repetidos
+ *    - Flag 'motor_desligado' evita comandos repetidos de desligamento da bomba
  *    - Melhora eficiência e durabilidade do sistema
  * 
- * ===== VALORES DE REFERÊNCIA =====
+ * ===== TABELA DE REFERÊNCIA (Baseada em dados experimentais) =====
  * 
- * ADC (0-4095)  |  Tensão (V)  |  Condição do Solo  |  Ação
- * --------------|--------------|-------------------|--------
- * 0    - 2478   |  0.0 - 1.99  |  Muito úmido      |  Bomba OFF
- * 2479 - 3100   |  2.0 - 2.49  |  Úmido adequado   |  Bomba OFF  
- * 3101 - 4095   |  2.5 - 3.3   |  Seco             |  Bomba ON
+ * | Tensão (V) | Água (mL) | Estado           |
+ * |------------|-----------|------------------|
+ * | 3.11-1.66  | 0-11      | Seco             |
+ * | 1.44-0.58  | 12-20     | Úmido Adequado   |
+ * | V <= 0.54  | mL >= 21  | Muito Úmido      |
+ * 
+ * O sistema considera:
+ * - SOLO MUITO ÚMIDO:     tensão < 0.58V e motor_desligado == 0 (bomba ON)
+ * - SOLO ÚMIDO:           tensão >= 0.58V (bomba OFF)
+ * - SOLO SECO:            tensão < 1.44V (bomba ON, libera novo ciclo)
  */
